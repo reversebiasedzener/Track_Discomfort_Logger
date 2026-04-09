@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0a0a14">
+<title>Track Ride Monitor</title>
+<link rel="manifest" href="manifest.json">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #0a0a14;
+  --surface: #11111e;
+  --surface2: #191928;
+  --border: rgba(255,255,255,0.07);
+  --border2: rgba(255,255,255,0.12);
+  --text: #e8e8f0;
+  --muted: #555570;
+  --accent-x: #4f9eff;
+  --accent-y: #2ecc8a;
+  --accent-z: #e06fff;
+  --danger: #ff4444;
+  --danger-dim: rgba(255,68,68,0.12);
+  --warn: #ffb020;
+  --green: #22c55e;
+  --mono: 'JetBrains Mono', monospace;
+  --sans: 'DM Sans', sans-serif;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+html, body { height: 100%; background: var(--bg); color: var(--text); font-family: var(--sans); overflow: hidden; }
+
+/* Layout */
+#app { display: flex; flex-direction: column; height: 100dvh; max-width: 480px; margin: 0 auto; }
+.topbar { flex-shrink: 0; background: var(--surface); border-bottom: 1px solid var(--border); padding: 10px 16px 8px; }
+.topbar-row1 { display: flex; align-items: center; justify-content: space-between; }
+.app-title { font-size: 13px; font-weight: 500; letter-spacing: 0.06em; color: var(--muted); text-transform: uppercase; }
+.session-pill { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--muted); }
+.session-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); transition: background 0.3s; }
+.session-dot.live { background: var(--green); box-shadow: 0 0 6px var(--green); animation: pulse 2s infinite; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
+.topbar-row2 { margin-top: 6px; display: flex; align-items: baseline; gap: 8px; }
+.speed-val { font-family: var(--mono); font-size: 28px; font-weight: 600; color: var(--text); transition: color 0.3s; }
+.speed-val.active { color: var(--accent-x); }
+.speed-unit { font-size: 12px; color: var(--muted); }
+.speed-threshold { font-size: 11px; color: var(--muted); margin-left: auto; }
+.threshold-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--muted); margin-right: 4px; }
+.threshold-dot.above { background: var(--green); }
+
+.scrollarea { flex: 1; overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+.scrollarea::-webkit-scrollbar { display: none; }
+
+/* Accel cards */
+.accel-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.accel-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 12px 10px; text-align: center; position: relative; overflow: hidden; }
+.accel-card::before { content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 3px; }
+.accel-card.cx::before { background: var(--accent-x); }
+.accel-card.cy::before { background: var(--accent-y); }
+.accel-card.cz::before { background: var(--accent-z); }
+.accel-axis { font-size: 10px; color: var(--muted); letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 6px; }
+.accel-val { font-family: var(--mono); font-size: 22px; font-weight: 600; transition: color 0.15s; }
+.accel-val.cx { color: var(--accent-x); }
+.accel-val.cy { color: var(--accent-y); }
+.accel-val.cz { color: var(--accent-z); }
+.accel-label { font-size: 9px; color: var(--muted); margin-top: 3px; }
+.accel-bar { margin-top: 8px; height: 3px; background: var(--border); border-radius: 2px; overflow: hidden; }
+.accel-bar-fill { height: 100%; border-radius: 2px; width: 0%; transition: width 0.2s; }
+.accel-bar-fill.cx { background: var(--accent-x); }
+.accel-bar-fill.cy { background: var(--accent-y); }
+.accel-bar-fill.cz { background: var(--accent-z); }
+
+/* Resultant */
+.resultant-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 12px 16px; display: flex; align-items: center; gap: 12px; }
+.resultant-label { font-size: 11px; color: var(--muted); }
+.resultant-val { font-family: var(--mono); font-size: 20px; font-weight: 600; color: var(--text); }
+.resultant-right { margin-left: auto; text-align: right; }
+.peak-label { font-size: 10px; color: var(--muted); }
+.peak-val { font-family: var(--mono); font-size: 13px; color: var(--warn); }
+
+/* GPS */
+.gps-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; }
+.gps-row { display: flex; align-items: center; gap: 10px; }
+.gps-icon { width: 32px; height: 32px; border-radius: 8px; background: rgba(79,158,255,0.1); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.gps-info { flex: 1; }
+.gps-coord { font-family: var(--mono); font-size: 11px; color: var(--text); }
+.gps-meta { font-size: 10px; color: var(--muted); margin-top: 2px; }
+.gps-accuracy { font-size: 10px; color: var(--muted); margin-left: auto; text-align: right; }
+
+/* Discomfort button */
+.discomfort-wrap { padding: 0; }
+.discomfort-btn {
+  width: 100%; padding: 20px 16px; border-radius: 14px;
+  background: var(--danger-dim); border: 1.5px solid var(--danger);
+  color: #ff8080; font-family: var(--sans); font-size: 16px; font-weight: 500;
+  cursor: pointer; text-align: center; letter-spacing: 0.04em;
+  transition: background 0.15s, transform 0.1s, box-shadow 0.15s;
+  -webkit-user-select: none; user-select: none;
+}
+.discomfort-btn:active { transform: scale(0.97); background: rgba(255,68,68,0.22); box-shadow: 0 0 20px rgba(255,68,68,0.2); }
+.discomfort-btn.fired { animation: flash 0.4s; }
+@keyframes flash { 0%{background:rgba(255,68,68,0.5)} 100%{background:var(--danger-dim)} }
+.discomfort-sub { font-size: 11px; color: var(--muted); margin-top: 4px; font-weight: 400; }
+
+/* Sync status */
+.sync-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 10px 14px; display: flex; align-items: center; gap: 10px; }
+.sync-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.sync-dot.ok { background: var(--green); }
+.sync-dot.err { background: var(--danger); }
+.sync-dot.pending { background: var(--warn); animation: pulse 1.5s infinite; }
+.sync-text { font-size: 12px; color: var(--muted); }
+.sync-count { margin-left: auto; font-family: var(--mono); font-size: 12px; color: var(--muted); }
+
+/* Log table */
+.log-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+.log-header-row { display: grid; grid-template-columns: 72px 1fr 1fr 1fr 1fr 22px; gap: 4px; padding: 8px 12px; border-bottom: 1px solid var(--border); }
+.log-header-row span { font-size: 9px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+.log-body { max-height: 160px; overflow-y: auto; }
+.log-body::-webkit-scrollbar { display: none; }
+.log-row { display: grid; grid-template-columns: 72px 1fr 1fr 1fr 1fr 22px; gap: 4px; padding: 6px 12px; border-bottom: 1px solid var(--border); align-items: center; }
+.log-row:last-child { border-bottom: none; }
+.log-row.flagged { background: rgba(255,68,68,0.05); }
+.log-cell { font-family: var(--mono); font-size: 10px; color: var(--text); }
+.log-cell.time { color: var(--muted); }
+.log-cell.flag { color: var(--danger); font-size: 13px; text-align: center; }
+.log-cell.high-x { color: var(--accent-x); }
+.log-cell.high-y { color: var(--accent-y); }
+.log-cell.high-z { color: var(--accent-z); }
+
+/* Bottom bar */
+.bottombar { flex-shrink: 0; background: var(--surface); border-top: 1px solid var(--border); padding: 10px 12px 16px; display: flex; gap: 8px; }
+.btn { flex: 1; padding: 11px 8px; border-radius: 10px; border: 1px solid var(--border2); background: transparent; color: var(--text); font-family: var(--sans); font-size: 13px; font-weight: 400; cursor: pointer; transition: background 0.15s; }
+.btn:active { background: var(--surface2); }
+.btn.primary { background: rgba(79,158,255,0.12); border-color: var(--accent-x); color: var(--accent-x); }
+.btn.danger-btn { background: var(--danger-dim); border-color: var(--danger); color: #ff8080; }
+
+/* Config modal */
+.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); display: flex; align-items: flex-end; z-index: 100; backdrop-filter: blur(4px); }
+.modal { background: var(--surface); border-radius: 20px 20px 0 0; padding: 20px 20px 32px; width: 100%; max-width: 480px; margin: 0 auto; }
+.modal h2 { font-size: 16px; font-weight: 500; margin-bottom: 16px; }
+.field { margin-bottom: 14px; }
+.field label { font-size: 12px; color: var(--muted); display: block; margin-bottom: 6px; }
+.field input { width: 100%; background: var(--surface2); border: 1px solid var(--border2); border-radius: 8px; padding: 10px 12px; color: var(--text); font-family: var(--mono); font-size: 13px; outline: none; }
+.field input:focus { border-color: var(--accent-x); }
+.field small { font-size: 10px; color: var(--muted); margin-top: 4px; display: block; }
+.modal-btns { display: flex; gap: 8px; margin-top: 20px; }
+.hidden { display: none !important; }
+
+/* Waiting overlay */
+#waiting { position: fixed; inset: 0; background: var(--bg); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; z-index: 50; }
+#waiting h2 { font-size: 18px; font-weight: 400; color: var(--muted); }
+#waiting p { font-size: 13px; color: var(--muted); text-align: center; max-width: 260px; line-height: 1.6; }
+.speed-big { font-family: var(--mono); font-size: 64px; font-weight: 600; color: var(--surface2); }
+.speed-big.approaching { color: var(--warn) !important; }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <div class="topbar">
+    <div class="topbar-row1">
+      <span class="app-title">Track Ride Monitor</span>
+      <div class="session-pill">
+        <div class="session-dot" id="sessionDot"></div>
+        <span id="sessionLabel">Not recording</span>
+      </div>
+    </div>
+    <div class="topbar-row2">
+      <span class="speed-val" id="speedDisplay">0.0</span>
+      <span class="speed-unit">km/h</span>
+      <span class="speed-threshold">
+        <span class="threshold-dot" id="threshDot"></span>
+        <span id="threshLabel">Below 80 km/h</span>
+      </span>
+    </div>
+  </div>
+
+  <div class="scrollarea">
+
+    <div class="accel-grid">
+      <div class="accel-card cx">
+        <div class="accel-axis">X — Lateral</div>
+        <div class="accel-val cx" id="ax">0.00</div>
+        <div class="accel-label">m/s² (sway)</div>
+        <div class="accel-bar"><div class="accel-bar-fill cx" id="barX"></div></div>
+      </div>
+      <div class="accel-card cy">
+        <div class="accel-axis">Y — Vertical</div>
+        <div class="accel-val cy" id="ay">9.81</div>
+        <div class="accel-label">m/s² (bounce)</div>
+        <div class="accel-bar"><div class="accel-bar-fill cy" id="barY"></div></div>
+      </div>
+      <div class="accel-card cz">
+        <div class="accel-axis">Z — Longit.</div>
+        <div class="accel-val cz" id="az">0.00</div>
+        <div class="accel-label">m/s² (jerk)</div>
+        <div class="accel-bar"><div class="accel-bar-fill cz" id="barZ"></div></div>
+      </div>
+    </div>
+
+    <div class="resultant-card">
+      <div>
+        <div class="resultant-label">Resultant G (XZ plane)</div>
+        <div class="resultant-val" id="resultant">0.00 m/s²</div>
+      </div>
+      <div class="resultant-right">
+        <div class="peak-label">Session peak</div>
+        <div class="peak-val" id="peakG">0.00</div>
+      </div>
+    </div>
+
+    <div class="gps-card">
+      <div class="gps-row">
+        <div class="gps-icon">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="#4f9eff">
+            <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
+          </svg>
+        </div>
+        <div class="gps-info">
+          <div class="gps-coord" id="gpsCoord">Acquiring GPS…</div>
+          <div class="gps-meta" id="gpsMeta">—</div>
+        </div>
+        <div class="gps-accuracy" id="gpsAcc">±— m</div>
+      </div>
+    </div>
+
+    <div class="discomfort-wrap">
+      <button class="discomfort-btn" id="discomfortBtn" onclick="markDiscomfort()">
+        ⚠ MARK DISCOMFORT
+        <div class="discomfort-sub">Flags 2s before + 3s after • records peak values</div>
+      </button>
+    </div>
+
+    <div class="sync-card">
+      <div class="sync-dot pending" id="syncDot"></div>
+      <span class="sync-text" id="syncText">Configure Google Sheets endpoint →</span>
+      <span class="sync-count" id="syncCount">0 rows</span>
+    </div>
+
+    <div class="log-card">
+      <div class="log-header-row">
+        <span>Time</span><span>X</span><span>Y</span><span>Z</span><span>km/h</span><span>!</span>
+      </div>
+      <div class="log-body" id="logBody">
+        <div style="padding:16px;text-align:center;font-size:11px;color:var(--muted)">Log starts above 80 km/h</div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="bottombar">
+    <button class="btn" onclick="showConfig()">⚙ Setup</button>
+    <button class="btn primary" id="sessionBtn" onclick="toggleSession()">Start Session</button>
+    <button class="btn" onclick="exportCSV()">↓ Export</button>
+  </div>
+</div>
+
+<!-- Waiting overlay -->
+<div id="waiting">
+  <div style="font-size:11px;color:var(--muted);letter-spacing:0.1em;text-transform:uppercase">Track Ride Monitor</div>
+  <div class="speed-big" id="waitSpeed">0</div>
+  <h2>Waiting for 80 km/h</h2>
+  <p>Recording will begin automatically once the train reaches the threshold speed.</p>
+  <button class="btn" onclick="showConfig()" style="max-width:200px">⚙ Configure Sheets</button>
+</div>
+
+<!-- Config modal -->
+<div class="modal-overlay hidden" id="configModal">
+  <div class="modal">
+    <h2>Google Sheets Configuration</h2>
+    <div class="field">
+      <label>Apps Script Web App URL</label>
+      <input type="url" id="cfgUrl" placeholder="https://script.google.com/macros/s/…/exec">
+      <small>Deploy the Apps Script (sheet-backend.gs) as a web app and paste the URL here.</small>
+    </div>
+    <div class="field">
+      <label>Session / Run Name</label>
+      <input type="text" id="cfgSession" placeholder="e.g. Delhi–Agra 2025-01-15 Run 1">
+    </div>
+    <div class="field">
+      <label>Speed threshold (km/h)</label>
+      <input type="number" id="cfgThreshold" value="80" min="10" max="200">
+    </div>
+    <div class="modal-btns">
+      <button class="btn" onclick="closeConfig()">Cancel</button>
+      <button class="btn primary" onclick="saveConfig()">Save & Close</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ─── State ───────────────────────────────────────────────────────────────────
+const state = {
+  running: false,
+  sessionName: localStorage.getItem('sessionName') || 'Session 1',
+  sheetsUrl: localStorage.getItem('sheetsUrl') || '',
+  threshold: parseFloat(localStorage.getItem('threshold') || '80'),
+  speed: 0,
+  lat: null, lng: null, accuracy: null,
+  ax: 0, ay: 9.81, az: 0,
+  rowCount: parseInt(localStorage.getItem('rowCount') || '0'),
+  peakG: 0,
+  sessionStart: null,
+  buffer: [],          // rolling 2s buffer for discomfort window
+  pendingRows: [],     // rows waiting to be sent
+  syncOk: false,
+  syncError: false,
+  discomfortActive: false,
+  discomfortUntil: 0,
+};
+
+// ─── Init ─────────────────────────────────────────────────────────────────────
+window.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('cfgUrl').value = state.sheetsUrl;
+  document.getElementById('cfgSession').value = state.sessionName;
+  document.getElementById('cfgThreshold').value = state.threshold;
+  startGPS();
+  requestMotionPermission();
+  setInterval(tick, 200);
+  setInterval(flushToSheets, 3000);
+  updateSyncUI();
+});
+
+// ─── GPS ──────────────────────────────────────────────────────────────────────
+function startGPS() {
+  if (!navigator.geolocation) { setGPSText('GPS not available', ''); return; }
+  navigator.geolocation.watchPosition(pos => {
+    state.lat = pos.coords.latitude;
+    state.lng = pos.coords.longitude;
+    state.accuracy = pos.coords.accuracy;
+    const spd = pos.coords.speed;
+    state.speed = (spd !== null && spd >= 0) ? spd * 3.6 : state.speed;
+    updateGPSUI();
+  }, err => {
+    setGPSText('GPS error: ' + err.message, '');
+  }, { enableHighAccuracy: true, maximumAge: 500, timeout: 10000 });
+}
+
+function updateGPSUI() {
+  const { lat, lng, accuracy, speed } = state;
+  if (lat === null) return;
+  document.getElementById('gpsCoord').textContent =
+    lat.toFixed(5) + '° N,  ' + lng.toFixed(5) + '° E';
+  document.getElementById('gpsMeta').textContent = speed.toFixed(1) + ' km/h GPS speed';
+  document.getElementById('gpsAcc').textContent = '±' + Math.round(accuracy || 0) + ' m';
+}
+function setGPSText(a, b) {
+  document.getElementById('gpsCoord').textContent = a;
+  document.getElementById('gpsMeta').textContent = b;
+}
+
+// ─── Motion ───────────────────────────────────────────────────────────────────
+async function requestMotionPermission() {
+  if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
+    try {
+      const r = await DeviceMotionEvent.requestPermission();
+      if (r === 'granted') attachMotion();
+    } catch(e) {
+      document.getElementById('cfgUrl').placeholder = 'Tap Setup first to grant motion permission on iOS';
+    }
+  } else {
+    attachMotion();
+  }
+}
+function attachMotion() {
+  window.addEventListener('devicemotion', e => {
+    const a = e.accelerationIncludingGravity || e.acceleration;
+    if (!a) return;
+    state.ax = a.x || 0;
+    state.ay = a.y || 0;
+    state.az = a.z || 0;
+  }, true);
+}
+
+// ─── Tick (200ms) ─────────────────────────────────────────────────────────────
+function tick() {
+  updateSpeedUI();
+  updateAccelUI();
+  const above = state.speed >= state.threshold;
+  // Show/hide waiting overlay
+  document.getElementById('waiting').style.display = (state.running && !above) ? 'flex' : 'none';
+  document.getElementById('waitSpeed').textContent = Math.round(state.speed);
+  document.getElementById('waitSpeed').className = 'speed-big' + (state.speed > 60 ? ' approaching' : '');
+  if (!state.running || !above) return;
+
+  const now = new Date();
+  const flagged = Date.now() < state.discomfortUntil;
+  const resultant = Math.sqrt(state.ax*state.ax + state.az*state.az);
+  if (resultant > state.peakG) state.peakG = resultant;
+  document.getElementById('peakG').textContent = state.peakG.toFixed(2);
+
+  const row = {
+    timestamp: now.toISOString(),
+    time: now.toTimeString().slice(0,8),
+    lat: state.lat ? state.lat.toFixed(6) : '',
+    lng: state.lng ? state.lng.toFixed(6) : '',
+    speed: state.speed.toFixed(1),
+    ax: state.ax.toFixed(3),
+    ay: state.ay.toFixed(3),
+    az: state.az.toFixed(3),
+    resultant: resultant.toFixed(3),
+    session: state.sessionName,
+    discomfort: flagged ? '1' : '0'
+  };
+
+  // Rolling 2s buffer (10 readings at 200ms)
+  state.buffer.push(row);
+  if (state.buffer.length > 10) state.buffer.shift();
+
+  state.pendingRows.push(row);
+  addLogRow(row, flagged);
+  updateRowCount();
+}
+
+function updateSpeedUI() {
+  const s = state.speed;
+  const el = document.getElementById('speedDisplay');
+  el.textContent = s.toFixed(1);
+  el.className = 'speed-val' + (s >= state.threshold ? ' active' : '');
+  const dot = document.getElementById('threshDot');
+  dot.className = 'threshold-dot' + (s >= state.threshold ? ' above' : '');
+  document.getElementById('threshLabel').textContent =
+    s >= state.threshold ? 'Above ' + state.threshold + ' ✓' : 'Below ' + state.threshold;
+}
+
+function updateAccelUI() {
+  document.getElementById('ax').textContent = state.ax.toFixed(2);
+  document.getElementById('ay').textContent = state.ay.toFixed(2);
+  document.getElementById('az').textContent = state.az.toFixed(2);
+  const res = Math.sqrt(state.ax*state.ax + state.az*state.az);
+  document.getElementById('resultant').textContent = res.toFixed(2) + ' m/s²';
+  // Bars: scale to 3 m/s² max for X/Z, 12 for Y
+  document.getElementById('barX').style.width = Math.min(100, Math.abs(state.ax)/3*100) + '%';
+  document.getElementById('barY').style.width = Math.min(100, Math.abs(state.ay)/12*100) + '%';
+  document.getElementById('barZ').style.width = Math.min(100, Math.abs(state.az)/3*100) + '%';
+}
+
+// ─── Log table ────────────────────────────────────────────────────────────────
+function addLogRow(row, flagged) {
+  const body = document.getElementById('logBody');
+  // Clear placeholder
+  if (body.querySelector('[data-placeholder]')) body.innerHTML = '';
+  const div = document.createElement('div');
+  div.className = 'log-row' + (flagged ? ' flagged' : '');
+  div.innerHTML = `
+    <span class="log-cell time">${row.time}</span>
+    <span class="log-cell">${parseFloat(row.ax).toFixed(2)}</span>
+    <span class="log-cell">${parseFloat(row.ay).toFixed(2)}</span>
+    <span class="log-cell">${parseFloat(row.az).toFixed(2)}</span>
+    <span class="log-cell">${parseFloat(row.speed).toFixed(0)}</span>
+    <span class="log-cell flag">${flagged ? '!' : ''}</span>
+  `;
+  body.insertBefore(div, body.firstChild);
+  // Keep max 50 rows in DOM
+  while (body.children.length > 50) body.removeChild(body.lastChild);
+}
+
+function updateRowCount() {
+  state.rowCount++;
+  localStorage.setItem('rowCount', state.rowCount);
+  document.getElementById('syncCount').textContent = state.rowCount + ' rows';
+}
+
+// ─── Discomfort button ────────────────────────────────────────────────────────
+function markDiscomfort() {
+  const btn = document.getElementById('discomfortBtn');
+  btn.classList.add('fired');
+  setTimeout(() => btn.classList.remove('fired'), 400);
+
+  // Flag 3 seconds forward
+  state.discomfortUntil = Date.now() + 3000;
+
+  // Retroactively flag the 2s buffer
+  state.buffer.forEach(r => { r.discomfort = '1'; });
+
+  // Add peak summary row
+  const peakX = Math.max(...state.buffer.map(r => Math.abs(parseFloat(r.ax))));
+  const peakY = Math.max(...state.buffer.map(r => Math.abs(parseFloat(r.ay))));
+  const peakZ = Math.max(...state.buffer.map(r => Math.abs(parseFloat(r.az))));
+  const summary = {
+    timestamp: new Date().toISOString(),
+    time: 'DISCOMFORT',
+    lat: state.lat ? state.lat.toFixed(6) : '',
+    lng: state.lng ? state.lng.toFixed(6) : '',
+    speed: state.speed.toFixed(1),
+    ax: peakX.toFixed(3),
+    ay: peakY.toFixed(3),
+    az: peakZ.toFixed(3),
+    resultant: Math.sqrt(peakX*peakX + peakZ*peakZ).toFixed(3),
+    session: state.sessionName,
+    discomfort: 'PEAK_SUMMARY'
+  };
+  state.pendingRows.push(summary);
+}
+
+// ─── Sheets sync ──────────────────────────────────────────────────────────────
+async function flushToSheets() {
+  if (!state.sheetsUrl || state.pendingRows.length === 0) return;
+  const rows = state.pendingRows.splice(0, state.pendingRows.length);
+  document.getElementById('syncDot').className = 'sync-dot pending';
+  document.getElementById('syncText').textContent = 'Syncing ' + rows.length + ' rows…';
+  try {
+    const res = await fetch(state.sheetsUrl, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ rows })
+    });
+    state.syncOk = true;
+    state.syncError = false;
+    document.getElementById('syncDot').className = 'sync-dot ok';
+    document.getElementById('syncText').textContent = 'Synced to Google Sheets';
+  } catch(e) {
+    state.syncError = true;
+    state.pendingRows.unshift(...rows);
+    document.getElementById('syncDot').className = 'sync-dot err';
+    document.getElementById('syncText').textContent = 'Sync failed — will retry';
+  }
+}
+
+function updateSyncUI() {
+  if (!state.sheetsUrl) {
+    document.getElementById('syncText').textContent = 'Tap ⚙ Setup to configure Google Sheets';
+    document.getElementById('syncDot').className = 'sync-dot err';
+  }
+}
+
+// ─── Session control ──────────────────────────────────────────────────────────
+function toggleSession() {
+  state.running = !state.running;
+  const btn = document.getElementById('sessionBtn');
+  const dot = document.getElementById('sessionDot');
+  if (state.running) {
+    state.peakG = 0;
+    state.buffer = [];
+    state.sessionStart = new Date();
+    btn.textContent = 'Stop Session';
+    btn.className = 'btn danger-btn';
+    dot.className = 'session-dot live';
+    document.getElementById('sessionLabel').textContent = 'Recording…';
+    document.getElementById('waiting').style.display = 'flex';
+  } else {
+    btn.textContent = 'Start Session';
+    btn.className = 'btn primary';
+    dot.className = 'session-dot';
+    document.getElementById('sessionLabel').textContent = 'Stopped';
+    document.getElementById('waiting').style.display = 'none';
+  }
+}
+
+// ─── Config modal ─────────────────────────────────────────────────────────────
+function showConfig() {
+  // On iOS, requesting motion permission requires user gesture
+  if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
+    DeviceMotionEvent.requestPermission().then(r => { if (r === 'granted') attachMotion(); });
+  }
+  document.getElementById('configModal').classList.remove('hidden');
+}
+function closeConfig() { document.getElementById('configModal').classList.add('hidden'); }
+function saveConfig() {
+  state.sheetsUrl = document.getElementById('cfgUrl').value.trim();
+  state.sessionName = document.getElementById('cfgSession').value.trim() || 'Session 1';
+  state.threshold = parseFloat(document.getElementById('cfgThreshold').value) || 80;
+  localStorage.setItem('sheetsUrl', state.sheetsUrl);
+  localStorage.setItem('sessionName', state.sessionName);
+  localStorage.setItem('threshold', state.threshold);
+  updateSyncUI();
+  closeConfig();
+}
+
+// ─── CSV Export ───────────────────────────────────────────────────────────────
+function exportCSV() {
+  const rows = [['timestamp','lat','lng','speed_kmh','ax_ms2','ay_ms2','az_ms2','resultant_ms2','session','discomfort']];
+  // We only have recent in-DOM log; a proper export would need indexedDB for large sessions
+  alert('Export: For full data, open Google Sheets → File → Download → CSV.\n\nFor offline export, see README for IndexedDB upgrade instructions.');
+}
+
+// ─── Timer display ────────────────────────────────────────────────────────────
+setInterval(() => {
+  if (state.running && state.sessionStart) {
+    const s = Math.floor((Date.now() - state.sessionStart) / 1000);
+    const h = String(Math.floor(s/3600)).padStart(2,'0');
+    const m = String(Math.floor((s%3600)/60)).padStart(2,'0');
+    const sec = String(s%60).padStart(2,'0');
+    document.getElementById('sessionLabel').textContent = `Recording • ${h}:${m}:${sec}`;
+  }
+}, 1000);
+</script>
+</body>
+</html>
